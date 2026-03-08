@@ -15,6 +15,10 @@ services:
       POSTGRES_WRITER_PASSWORD: ${POSTGRES_WRITER_PASSWORD}
       POSTGRES_READER_USER: ${POSTGRES_READER_USER}
       POSTGRES_READER_PASSWORD: ${POSTGRES_READER_PASSWORD}
+      KESTRA_POSTGRES_USER: ${KESTRA_POSTGRES_USER}
+      KESTRA_POSTGRES_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
+      METABASE_POSTGRES_USER: ${METABASE_POSTGRES_USER}
+      METABASE_POSTGRES_PASSWORD: ${METABASE_POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh
@@ -75,9 +79,71 @@ services:
     networks:
       - sport_network
 
+  kestra:
+    image: kestra/kestra:latest
+    container_name: sport_kestra
+    user: "root"
+    command: server standalone
+    environment:
+      KESTRA_DATASOURCES_0_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KESTRA_DATASOURCES_0_USERNAME: ${KESTRA_POSTGRES_USER}
+      KESTRA_DATASOURCES_0_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
+      KESTRA_DATASOURCES_0_DRIVERCLASSNAME: org.postgresql.Driver
+      KESTRA_STORAGE_TYPE: local
+      KESTRA_REPOSITORY_TYPE: postgres
+      KESTRA_QUEUE_TYPE: postgres
+    volumes:
+      - ./kestra/flows:/flows
+      - .:/app
+      - kestra_data:/app/storage
+    ports:
+      - "${KESTRA_EXTERNAL_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - sport_network
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: sport_metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: postgres
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_USER: ${METABASE_POSTGRES_USER}
+      MB_DB_PASS: ${METABASE_POSTGRES_PASSWORD}
+      JAVA_TIMEZONE: Europe/Paris
+    volumes:
+      - metabase_data:/metabase-data
+    ports:
+      - "${METABASE_EXTERNAL_PORT}:3000"
+    depends_on:
+      postgres:
+        condition : service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - sport_network
+
 volumes:
   postgres_data:
   redpanda_data:
+  kestra_data:
+  metabase_data:
 
 networks:
   sport_network:

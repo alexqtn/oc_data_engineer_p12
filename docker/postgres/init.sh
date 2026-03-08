@@ -5,7 +5,7 @@
 # Environment variables injected by Docker at runtime
 # ============================================================
 
-set -e  # Exit immediately if any command fails
+set -e
 
 echo "Creating roles and granting permissions..."
 
@@ -19,9 +19,19 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     CREATE ROLE $POSTGRES_READER_USER WITH LOGIN
         PASSWORD '$POSTGRES_READER_PASSWORD';
 
+    -- Kestra role: used by Kestra to store its own metadata
+    CREATE ROLE $KESTRA_POSTGRES_USER WITH LOGIN
+        PASSWORD '$KESTRA_POSTGRES_PASSWORD';
+
+    -- Metabase role: manages its own schema for dashboard definition
+    CREATE ROLE $METABASE_POSTGRES_USER WITH LOGIN
+        PASSWORD '$METABASE_POSTGRES_PASSWORD';
+
     -- Grant connection rights
     GRANT CONNECT ON DATABASE $POSTGRES_DB TO $POSTGRES_WRITER_USER;
     GRANT CONNECT ON DATABASE $POSTGRES_DB TO $POSTGRES_READER_USER;
+    GRANT CONNECT ON DATABASE $POSTGRES_DB TO $KESTRA_POSTGRES_USER;
+    GRANT CONNECT ON DATABASE $POSTGRES_DB TO $METABASE_POSTGRES_USER;
 
     -- Schema usage rights
     GRANT USAGE ON SCHEMA public TO $POSTGRES_WRITER_USER;
@@ -33,6 +43,10 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
     -- Reader permissions
     GRANT SELECT ON ALL TABLES IN SCHEMA public TO $POSTGRES_READER_USER;
+
+    -- Grant ability to create schemas inside our existing database
+    GRANT CREATE ON DATABASE $POSTGRES_DB TO $KESTRA_POSTGRES_USER;
+    GRANT CREATE ON DATABASE $POSTGRES_DB TO $METABASE_POSTGRES_USER;
 
     -- Future tables inherit same permissions automatically
     ALTER DEFAULT PRIVILEGES IN SCHEMA public
