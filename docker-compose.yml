@@ -5,7 +5,7 @@
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:15.7
     container_name: sport_postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -34,7 +34,7 @@ services:
       - sport_network
 
   redpanda:
-    image: redpandadata/redpanda:latest
+    image: redpandadata/redpanda:v24.2.7
     container_name: sport_redpanda
     command:
       - redpanda
@@ -66,7 +66,7 @@ services:
       - sport_network
 
   redpanda-console:
-    image: redpandadata/console:latest
+    image: redpandadata/console:v2.7.2
     container_name: sport_redpanda_console
     environment:
       KAFKA_BROKERS: redpanda:9092
@@ -80,21 +80,28 @@ services:
       - sport_network
 
   kestra:
-    image: kestra/kestra:latest
+    image: kestra/kestra:v0.18.0
     container_name: sport_kestra
     user: "root"
     command: server standalone
     environment:
-      KESTRA_DATASOURCES_0_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      KESTRA_DATASOURCES_0_USERNAME: ${KESTRA_POSTGRES_USER}
-      KESTRA_DATASOURCES_0_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
-      KESTRA_DATASOURCES_0_DRIVERCLASSNAME: org.postgresql.Driver
-      KESTRA_STORAGE_TYPE: local
-      KESTRA_REPOSITORY_TYPE: postgres
-      KESTRA_QUEUE_TYPE: postgres
+      DATASOURCES_POSTGRES_URL: jdbc:postgresql://postgres:5432/kestradb
+      DATASOURCES_POSTGRES_DRIVER_CLASS_NAME: org.postgresql.Driver
+      DATASOURCES_POSTGRES_USERNAME: ${KESTRA_POSTGRES_USER}
+      DATASOURCES_POSTGRES_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
+      KESTRA_CONFIGURATION: |
+        kestra:
+          repository:
+            type: postgres
+          queue:
+            type: postgres
+          storage:
+            type: local
+            local:
+              basePath: /app/storage
     volumes:
       - ./kestra/flows:/flows
-      - .:/app
+      - .:/workspace
       - kestra_data:/app/storage
     ports:
       - "${KESTRA_EXTERNAL_PORT}:8080"
@@ -113,7 +120,8 @@ services:
       - sport_network
 
   metabase:
-    image: metabase/metabase:latest
+    image: metabase/metabase:v0.50.24
+    platform: linux/amd64
     container_name: sport_metabase
     environment:
       MB_DB_TYPE: postgres
@@ -129,7 +137,7 @@ services:
       - "${METABASE_EXTERNAL_PORT}:3000"
     depends_on:
       postgres:
-        condition : service_healthy
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 30s

@@ -1,0 +1,22 @@
+# ============================================================
+# kestra-config.yml
+# Kestra configuration for PostgreSQL backend
+# Mounted into container at /app/kestra-config.yml
+# ============================================================
+
+datasources:
+  default:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+    driverClassName: org.postgresql.Driver
+    username: ${KESTRA_POSTGRES_USER}
+    password: ${KESTRA_POSTGRES_PASSWORD}
+
+kestra:
+  repository:
+    type: postgres
+  storage:
+    type: local
+    local:
+      base-path: "/app/storage"
+  queue:
+    type: postgres
