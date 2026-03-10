@@ -111,7 +111,7 @@ services:
       redpanda:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 10
@@ -127,10 +127,9 @@ services:
       MB_DB_TYPE: postgres
       MB_DB_HOST: postgres
       MB_DB_PORT: 5432
-      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_DBNAME: metabasedb
       MB_DB_USER: ${METABASE_POSTGRES_USER}
       MB_DB_PASS: ${METABASE_POSTGRES_PASSWORD}
-      JAVA_TIMEZONE: Europe/Paris
     volumes:
       - metabase_data:/metabase-data
     ports:
@@ -141,7 +140,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
       interval: 30s
-      timeout: 15s
+      timeout: 20s
       retries: 10
     restart: unless-stopped
     networks:

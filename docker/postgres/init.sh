@@ -61,7 +61,6 @@ EOSQL
 
 # --------------------------------------------------------
 # Create dedicated kestradb — must run as separate command
-# because CREATE DATABASE cannot run inside a transaction
 # --------------------------------------------------------
 echo "Creating kestradb for Kestra..."
 
@@ -71,7 +70,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "postgres" <<-EOSQL
 
 EOSQL
 
-# Grant full privileges on kestradb to kestra_user
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "kestradb" <<-EOSQL
 
     GRANT ALL PRIVILEGES ON SCHEMA public TO $KESTRA_POSTGRES_USER;
@@ -82,4 +80,22 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "kestradb" <<-EOSQL
 
 EOSQL
 
-echo "All roles and databases created successfully."
+# --------------------------------------------------------
+# Create dedicated metabasedb — must run as separate command
+# --------------------------------------------------------
+
+echo "Creating metabasedb for Metabase..."
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "postgres" <<-EOSQL
+    CREATE DATABASE metabasedb OWNER $METABASE_POSTGRES_USER;
+EOSQL
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "metabasedb" <<-EOSQL
+    GRANT ALL PRIVILEGES ON SCHEMA public TO $METABASE_POSTGRES_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT ALL ON TABLES TO $METABASE_POSTGRES_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT ALL ON SEQUENCES TO $METABASE_POSTGRES_USER;
+EOSQL
+
+echo "All databases created successfully."
