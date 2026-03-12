@@ -1,19 +1,6 @@
--- ==========================================================
--- v1__init_schema.sql
--- Initial schema for Sport Data Solution
--- ==========================================================
-
--- ==========================================================
--- EXTENSIONS
--- ==========================================================
-
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- =========================================================
--- ENUM TYPES
--- =========================================================
 
 CREATE TYPE transport_mode AS ENUM(
     'walking',
@@ -35,11 +22,6 @@ CREATE TYPE data_source AS ENUM(
     'strava'
 );
 
-
--- =====================================================
--- CREATE BENEFIT RULES TABLES
--- =====================================================
-
 CREATE TABLE benefit_rules(
     ru_id SERIAL PRIMARY KEY,
     ru_name VARCHAR(100) NOT NULL,
@@ -53,10 +35,6 @@ CREATE TABLE benefit_rules(
 
 CREATE INDEX idx_ru_name_effective
     ON benefit_rules(ru_name, ru_effective_date DESC);
-
--- =====================================================
--- CREATE EMPLOYEES TABLES
--- =====================================================
 
 CREATE TABLE employees (
     rh_employee_id VARCHAR(50) PRIMARY KEY,
@@ -79,10 +57,6 @@ CREATE TABLE employees (
 
 CREATE INDEX idx_rh_transport_mode
     ON employees(rh_transport_mode);
-
--- =====================================================
--- CREATE SPORT ACTIVITIES TABLES
--- =====================================================
 
 CREATE TABLE sport_activities (
     sp_activity_id serial PRIMARY KEY,
