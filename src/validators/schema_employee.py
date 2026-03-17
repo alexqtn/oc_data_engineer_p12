@@ -1,3 +1,30 @@
+"""
+schema_employee.py
+------------------
+Pydantic validation schema for raw HR data from DonneesRH.xlsx.
+
+Purpose:
+    First validation gate in the ETL pipeline.
+    Ensures every employee row meets quality standards
+    before any transformation or database insertion occurs.
+
+Validates:
+    - Field presence and types (11 fields)
+    - Employee ID coercion from int to string
+    - Date parsing and time component removal
+    - Salary positivity
+    - Transport mode against 4 known French values
+    - Contract type (CDI/CDD only)
+    - CP days range (25-29, French legal minimum)
+    - Address not null-like
+    - Cross-field: hire_date > birth_date, age >= 16 at hire
+
+Usage:
+    from src.validators.schema_employee import EmployeeSchema
+    validated = EmployeeSchema(**row_dict)
+"""
+
+
 from pydantic import BaseModel, field_validator, model_validator
 from datetime import date, datetime
 from typing import Optional
