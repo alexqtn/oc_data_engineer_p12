@@ -148,8 +148,8 @@ def transform(employees: list[dict]) -> list[dict]:
             "rh_cp_days":        emp["cp_days"],
             "rh_transport_mode": db_mode,
             "rh_is_active":      True,
+            "rh_sport":             emp.get("sport"),
             "home_address":      emp["home_address"],
-            "sport":             emp.get("sport"),
         })
 
     logger.info(f"Transformed {len(transformed)} employees")
@@ -224,6 +224,7 @@ UPSERT_QUERY = text("""
         rh_city,
         rh_transport_mode,
         rh_is_active,
+        rh_sport,
         be_declaration_valid,
         rh_created_at,
         rh_updated_at
@@ -243,6 +244,7 @@ UPSERT_QUERY = text("""
         pgp_sym_encrypt(:rh_city, :key),
         :rh_transport_mode,
         :rh_is_active,
+        :rh_sport,
         :be_declaration_valid,
         NOW(),
         NOW()
@@ -262,6 +264,7 @@ UPSERT_QUERY = text("""
         rh_city              = pgp_sym_encrypt(:rh_city, :key),
         rh_transport_mode    = :rh_transport_mode,
         rh_is_active         = :rh_is_active,
+        rh_sport             = :rh_sport,
         be_declaration_valid = :be_declaration_valid,
         rh_updated_at        = NOW()
 """)
@@ -297,6 +300,7 @@ def upsert_employees(employees: list[dict]) -> None:
                 "rh_city":            emp["rh_city"],
                 "rh_transport_mode":  emp["rh_transport_mode"],
                 "rh_is_active":       emp["rh_is_active"],
+                "rh_sport":           emp.get("rh_sport"),
                 "be_declaration_valid": emp["be_declaration_valid"],
                 "key":                ENCRYPTION_KEY,
             })
