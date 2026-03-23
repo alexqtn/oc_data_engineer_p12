@@ -10,9 +10,8 @@ from pathlib import Path
 from datetime import datetime
 
 from dotenv import load_dotenv
-from kafka import KafkaProducer
-from kafka.admin import KafkaAdminClient, NewTopic
-from kafka.errors import TopicAlreadyExistsError, UnknownTopicOrPartitionError
+from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient, NewTopic
 import os
 
 from src.utils.logger import get_logger
@@ -27,16 +26,12 @@ load_dotenv(ROOT_DIR / ".env")
 REDPANDA_HOST = os.getenv("POSTGRES_EXTERNAL_HOST", "localhost")
 REDPANDA_PORT = os.getenv("REDPANDA_EXTERNAL_PORT", "19092")
 REDPANDA_BROKER = f"{REDPANDA_HOST}:{REDPANDA_PORT}"
+
 TOPIC_NAME = "sport_activities"
 
 
-# ============================================================
-# Custom JSON serializer that handles datetime objects.
-# KafkaProducer needs a function that converts Python dict → bytes.
-# datetime is not JSON-serializable by default, so we convert
-# it to ISO format string before encoding.
-# ============================================================
 def _json_serializer(data):
+    """Converts Python dict to JSON bytes, handling datetime objects."""
     def default_handler(obj):
         if isinstance(obj, datetime):
             return obj.isoformat()
@@ -45,88 +40,69 @@ def _json_serializer(data):
     return json.dumps(data, default=default_handler).encode("utf-8")
 
 
-# ============================================================
-# STEP 1 — Reset topic to avoid duplicates from previous runs.
-# Deletes existing topic, waits, then recreates it.
-# ============================================================
 def reset_topic():
+    """Deletes and recreates the topic to avoid duplicates."""
     logger.info(f"Resetting topic '{TOPIC_NAME}'")
 
-    admin = KafkaAdminClient(
-        bootstrap_servers=REDPANDA_BROKER,
-        client_id="sport_admin",
-    )
+    admin = AdminClient({"bootstrap.servers": REDPANDA_BROKER})
 
     # Delete if exists
-    try:
-        admin.delete_topics([TOPIC_NAME])
-        logger.info(f"Deleted existing topic '{TOPIC_NAME}'")
+    futures = admin.delete_topics([TOPIC_NAME])
+    for topic, future in futures.items():
+        try:
+            future.result()
+            logger.info(f"Deleted existing topic '{topic}'")
+        except Exception:
+            logger.info(f"Topic '{topic}' does not exist — nothing to delete")
 
-        import time
-        time.sleep(2)
+    import time
+    time.sleep(2)
 
-    except UnknownTopicOrPartitionError:
-        logger.info(f"Topic '{TOPIC_NAME}' does not exist — nothing to delete")
-
-    # Recreate with 1 partition (sufficient for POC)
-    try:
-        admin.create_topics([
-            NewTopic(
-                name=TOPIC_NAME,
-                num_partitions=1,
-                replication_factor=1,
-            )
-        ])
-        logger.info(f"Created topic '{TOPIC_NAME}'")
-    except TopicAlreadyExistsError:
-        logger.info(f"Topic '{TOPIC_NAME}' already exists")
-
-    admin.close()
+    # Recreate
+    new_topic = NewTopic(TOPIC_NAME, num_partitions=1, replication_factor=1)
+    futures = admin.create_topics([new_topic])
+    for topic, future in futures.items():
+        try:
+            future.result()
+            logger.info(f"Created topic '{topic}'")
+        except Exception as e:
+            logger.info(f"Topic '{topic}' already exists: {e}")
 
 
-# ============================================================
-# STEP 2 — Publish all activities to Redpanda topic.
-# Each activity is a JSON message with employee_id as key.
-# Async: sends all messages then flushes at the end.
-# ============================================================
 def publish(activities: list[dict]):
+    """Publishes all activities to Redpanda topic asynchronously."""
     logger.info(f"Publishing {len(activities)} activities to '{TOPIC_NAME}'")
 
-    producer = KafkaProducer(
-        bootstrap_servers=REDPANDA_BROKER,
-        key_serializer=lambda k: k.encode("utf-8"),
-        value_serializer=_json_serializer,
-    )
+    producer = Producer({"bootstrap.servers": REDPANDA_BROKER})
 
     success_count = 0
     error_count = 0
 
-    for activity in activities:
-        try:
-            producer.send(
-                topic=TOPIC_NAME,
-                key=activity["employee_id"],
-                value=activity,
-            )
+    def delivery_callback(err, msg):
+        nonlocal success_count, error_count
+        if err:
+            error_count += 1
+            logger.warning(f"Delivery failed: {err}")
+        else:
             success_count += 1
 
-        except Exception as e:
-            error_count += 1
-            logger.warning(f"Failed to publish activity: {e}")
+    for activity in activities:
+        producer.produce(
+            topic=TOPIC_NAME,
+            key=activity["employee_id"].encode("utf-8"),
+            value=_json_serializer(activity),
+            callback=delivery_callback,
+        )
 
-    # Wait for all async messages to be confirmed by Redpanda
+        # Trigger callbacks periodically to avoid buffer overflow
+        producer.poll(0)
+
+    # Wait for all messages to be delivered
     producer.flush()
-    producer.close()
 
-    logger.info(
-        f"Published {success_count} activities "
-        f"({error_count} errors)"
-    )
+    logger.info(f"Published {success_count} activities ({error_count} errors)")
 
 
-# ============================================================
-# MAIN — Generate activities, reset topic, publish all.
-# ============================================================
 def main():
     logger.info("=" * 60)
     logger.info("ACTIVITY PUBLISHER — Starting")
