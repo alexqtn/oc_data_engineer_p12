@@ -25,7 +25,10 @@ load_dotenv(ROOT_DIR / ".env")
 
 REDPANDA_HOST = os.getenv("POSTGRES_EXTERNAL_HOST", "localhost")
 REDPANDA_PORT = os.getenv("REDPANDA_EXTERNAL_PORT", "19092")
-REDPANDA_BROKER = f"{REDPANDA_HOST}:{REDPANDA_PORT}"
+REDPANDA_BROKER = os.getenv(
+    "REDPANDA_EXTERNAL_BROKER",
+    os.getenv("REDPANDA_BROKERS", "localhost:19092")
+)
 
 TOPIC_NAME = "sport_activities"
 

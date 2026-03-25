@@ -1,0 +1,104 @@
+id: full_pipeline
+namespace: sport_data_solution
+description: "Full ETL pipeline — HR, Activities, Benefits"
+
+tasks:
+  - id: phase1_load_employees
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Phase 1 — Extract, validate, transform, encrypt, upsert employees"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+        : "${SPORT_ENCRYPTION_KEY:?SPORT_ENCRYPTION_KEY is not set}"
+        : "${SPORT_GOOGLE_MAPS_API_KEY:?SPORT_GOOGLE_MAPS_API_KEY is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export ENCRYPTION_KEY="${SPORT_ENCRYPTION_KEY}"
+        export GOOGLE_MAPS_API_KEY="${SPORT_GOOGLE_MAPS_API_KEY}"
+
+        cd /workspace
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv pydantic requests openpyxl --quiet
+        python -m src.pipelines.load_employees
+
+  - id: phase2_publish_activities
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Phase 2a — Generate activities and publish to Redpanda"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export REDPANDA_BROKERS="redpanda:9092"
+
+        cd /workspace
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv confluent-kafka --quiet
+        python -m src.producers.publish_activities
+
+  - id: phase2_consume_postgres
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Phase 2b — Consume activities from Redpanda into PostgreSQL"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export REDPANDA_BROKERS="redpanda:9092"
+
+        cd /workspace
+        pip install sqlalchemy psycopg2-binary python-dotenv confluent-kafka --quiet
+        python -m src.consumers.consumer_postgres
+
+  - id: phase3_compute_benefits
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Phase 3 — Compute prime and well-being eligibility"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+        : "${SPORT_ENCRYPTION_KEY:?SPORT_ENCRYPTION_KEY is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export ENCRYPTION_KEY="${SPORT_ENCRYPTION_KEY}"
+
+        cd /workspace
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv python-dateutil --quiet
+        python -m src.pipelines.compute_benefits

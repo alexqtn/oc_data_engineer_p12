@@ -89,6 +89,10 @@ services:
       DATASOURCES_POSTGRES_DRIVER_CLASS_NAME: org.postgresql.Driver
       DATASOURCES_POSTGRES_USERNAME: ${KESTRA_POSTGRES_USER}
       DATASOURCES_POSTGRES_PASSWORD: ${KESTRA_POSTGRES_PASSWORD}
+      SPORT_POSTGRES_WRITER_USER: ${POSTGRES_WRITER_USER}
+      SPORT_POSTGRES_WRITER_PASSWORD: ${POSTGRES_WRITER_PASSWORD}
+      SPORT_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      SPORT_GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
       KESTRA_CONFIGURATION: |
         kestra:
           repository:
@@ -99,10 +103,13 @@ services:
             type: local
             local:
               basePath: /app/storage
+          variables:
+            env-vars-prefix: SPORT_
     volumes:
       - ./kestra/flows:/flows
       - .:/workspace
       - kestra_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${KESTRA_EXTERNAL_PORT}:8080"
     depends_on:

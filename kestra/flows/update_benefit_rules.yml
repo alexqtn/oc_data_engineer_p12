@@ -1,0 +1,78 @@
+id: update_benefit_rules
+namespace: sport_data_solution
+description: "Update a benefit rule and recompute eligibility"
+
+inputs:
+  - id: rule_name
+    type: STRING
+    defaults: prime_rate
+    description: "Rule to update (prime_rate, min_activities, well_being_days)"
+
+  - id: new_value
+    type: FLOAT
+    description: "New value for the rule"
+
+tasks:
+  - id: insert_new_rule
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Insert new rule value into benefit_rules (SCD2)"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+
+        cd /workspace
+        pip install sqlalchemy psycopg2-binary python-dotenv --quiet
+        python -c "
+        from sqlalchemy import create_engine, text
+        import os
+        engine = create_engine(
+            f\"postgresql+psycopg2://{os.environ['POSTGRES_WRITER_USER']}:{os.environ['POSTGRES_WRITER_PASSWORD']}@{os.environ['POSTGRES_EXTERNAL_HOST']}:{os.environ['POSTGRES_EXTERNAL_PORT']}/{os.environ['POSTGRES_DB']}\"
+        )
+        with engine.begin() as conn:
+            conn.execute(text('''
+                INSERT INTO benefit_rules (ru_name, ru_activity, ru_metrics, ru_value, ru_benefit, ru_effective_date)
+                SELECT ru_name, ru_activity, ru_metrics, {{ inputs.new_value }}, ru_benefit, NOW()
+                FROM benefit_rules
+                WHERE ru_name = :rule_name
+                ORDER BY ru_effective_date DESC
+                LIMIT 1
+            '''), {'rule_name': '{{ inputs.rule_name }}'})
+        print('Rule inserted successfully')
+        "
+
+  - id: recompute
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Re-compute benefits with new rule value"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+        : "${SPORT_ENCRYPTION_KEY:?SPORT_ENCRYPTION_KEY is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export ENCRYPTION_KEY="${SPORT_ENCRYPTION_KEY}"
+
+        cd /workspace
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv python-dateutil --quiet
+        python -m src.pipelines.compute_benefits

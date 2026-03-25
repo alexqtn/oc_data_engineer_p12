@@ -1,0 +1,34 @@
+# ============================================================
+# recompute_benefits.yml — Re-runs Phase 3 only
+# Used after a parameter change (prime rate, thresholds)
+# ============================================================
+
+id: recompute_benefits
+namespace: sport_data_solution
+description: "Re-compute benefit eligibility with current rules"
+
+tasks:
+  - id: compute_benefits
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: "Compute prime and well-being eligibility"
+    warningOnStdErr: false
+    taskRunner:
+      type: io.kestra.plugin.core.runner.Process
+    commands:
+      - |
+        set -eu
+
+        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
+        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
+        : "${SPORT_ENCRYPTION_KEY:?SPORT_ENCRYPTION_KEY is not set}"
+
+        export POSTGRES_EXTERNAL_HOST="postgres"
+        export POSTGRES_EXTERNAL_PORT="5432"
+        export POSTGRES_DB="sportdb"
+        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
+        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
+        export ENCRYPTION_KEY="${SPORT_ENCRYPTION_KEY}"
+
+        cd /workspace
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv python-dateutil --quiet
+        python -m src.pipelines.compute_benefits
