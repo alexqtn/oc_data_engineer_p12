@@ -1,19 +1,26 @@
 # ============================================================
-# full_pipeline.yml — Runs all 3 pipeline phases sequentially
-# Phase 1: HR Pipeline (load employees from Excel)
-# Phase 2: Activity Pipeline (generate + publish + consume)
-# Phase 3: Benefit Pipeline (compute prime + well-being eligibility)
-# Trigger: manual or scheduled
+# inject_live_activity.yml — Live demo: inject new activities
+# Creates N activities for an employee, publishes to Redpanda,
+# sends Slack notifications, consumes into PostgreSQL,
+# then recomputes benefits.
+# Used during soutenance live demo.
+# Inputs: employee_id (STRING), activity_count (INT)
 # ============================================================
 
-id: full_pipeline
+id: inject_live_activity
 namespace: sport_data_solution
-description: "Full ETL pipeline — HR, Activities, Benefits"
+description: "Live demo — inject activities, notify Slack, update DB and benefits"
+
+inputs:
+  - id: activity_count
+    type: INT
+    defaults: 3
+    description: "Number of activities to inject (random employees)"
 
 tasks:
-  - id: phase1_load_employees
+  - id: inject_and_notify
     type: io.kestra.plugin.scripts.shell.Commands
-    description: "Phase 1 — Extract, validate, transform, encrypt, upsert employees"
+    description: "Generate activities, publish to Redpanda, send Slack notifications"
     warningOnStdErr: false
     taskRunner:
       type: io.kestra.plugin.core.runner.Process
@@ -24,7 +31,7 @@ tasks:
         : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
         : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
         : "${SPORT_ENCRYPTION_KEY:?SPORT_ENCRYPTION_KEY is not set}"
-        : "${SPORT_GOOGLE_MAPS_API_KEY:?SPORT_GOOGLE_MAPS_API_KEY is not set}"
+        : "${SPORT_SLACK_WEBHOOK_URL:?SPORT_SLACK_WEBHOOK_URL is not set}"
 
         export POSTGRES_EXTERNAL_HOST="postgres"
         export POSTGRES_EXTERNAL_PORT="5432"
@@ -32,15 +39,17 @@ tasks:
         export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
         export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
         export ENCRYPTION_KEY="${SPORT_ENCRYPTION_KEY}"
-        export GOOGLE_MAPS_API_KEY="${SPORT_GOOGLE_MAPS_API_KEY}"
+        export SLACK_WEBHOOK_URL="${SPORT_SLACK_WEBHOOK_URL}"
+        export REDPANDA_BROKERS="redpanda:9092"
+        export REDPANDA_EXTERNAL_BROKER="redpanda:9092"
 
         cd /workspace
-        pip install pandas sqlalchemy psycopg2-binary python-dotenv pydantic requests openpyxl --quiet
-        python -m src.pipelines.load_employees
+        pip install pandas sqlalchemy psycopg2-binary python-dotenv confluent-kafka requests pydantic --quiet
+        python -m src.pipelines.inject_live_activity {{ inputs.activity_count }}
 
-  - id: phase2_publish_activities
+  - id: consume_to_postgres
     type: io.kestra.plugin.scripts.shell.Commands
-    description: "Phase 2a — Generate activities and publish to Redpanda"
+    description: "Consume new activities from Redpanda into PostgreSQL"
     warningOnStdErr: false
     taskRunner:
       type: io.kestra.plugin.core.runner.Process
@@ -57,38 +66,15 @@ tasks:
         export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
         export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
         export REDPANDA_BROKERS="redpanda:9092"
-
-        cd /workspace
-        pip install pandas sqlalchemy psycopg2-binary python-dotenv confluent-kafka --quiet
-        python -m src.producers.publish_activities
-
-  - id: phase2_consume_postgres
-    type: io.kestra.plugin.scripts.shell.Commands
-    description: "Phase 2b — Consume activities from Redpanda into PostgreSQL"
-    warningOnStdErr: false
-    taskRunner:
-      type: io.kestra.plugin.core.runner.Process
-    commands:
-      - |
-        set -eu
-
-        : "${SPORT_POSTGRES_WRITER_USER:?SPORT_POSTGRES_WRITER_USER is not set}"
-        : "${SPORT_POSTGRES_WRITER_PASSWORD:?SPORT_POSTGRES_WRITER_PASSWORD is not set}"
-
-        export POSTGRES_EXTERNAL_HOST="postgres"
-        export POSTGRES_EXTERNAL_PORT="5432"
-        export POSTGRES_DB="sportdb"
-        export POSTGRES_WRITER_USER="${SPORT_POSTGRES_WRITER_USER}"
-        export POSTGRES_WRITER_PASSWORD="${SPORT_POSTGRES_WRITER_PASSWORD}"
-        export REDPANDA_BROKERS="redpanda:9092"
+        export REDPANDA_EXTERNAL_BROKER="redpanda:9092"
 
         cd /workspace
         pip install sqlalchemy psycopg2-binary python-dotenv confluent-kafka --quiet
         python -m src.consumers.consumer_postgres
 
-  - id: phase3_compute_benefits
+  - id: recompute_benefits
     type: io.kestra.plugin.scripts.shell.Commands
-    description: "Phase 3 — Compute prime and well-being eligibility"
+    description: "Recompute benefits with new activity count"
     warningOnStdErr: false
     taskRunner:
       type: io.kestra.plugin.core.runner.Process

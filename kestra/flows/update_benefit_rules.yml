@@ -1,3 +1,11 @@
+# ============================================================
+# update_benefit_rules.yml — Change a business parameter
+# Inserts a new rule value via SCD2 (keeps history)
+# then automatically recomputes all employee benefits.
+# Used during live demo to change prime_rate from 5% to 7%.
+# Inputs: rule_name (STRING), new_value (FLOAT)
+# ============================================================
+
 id: update_benefit_rules
 namespace: sport_data_solution
 description: "Update a benefit rule and recompute eligibility"

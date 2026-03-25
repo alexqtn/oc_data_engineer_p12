@@ -1,6 +1,9 @@
 # ============================================================
 # recompute_benefits.yml — Re-runs Phase 3 only
-# Used after a parameter change (prime rate, thresholds)
+# Used after a business parameter change (prime rate, thresholds)
+# Reads current benefit_rules (SCD2 latest) and recomputes
+# eligibility for all active employees.
+# Trigger: manual or after update_benefit_rules
 # ============================================================
 
 id: recompute_benefits
