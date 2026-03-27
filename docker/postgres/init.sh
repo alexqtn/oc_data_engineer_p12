@@ -98,4 +98,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "metabasedb" <<-EOS
         GRANT ALL ON SEQUENCES TO $METABASE_POSTGRES_USER;
 EOSQL
 
+psql -U "$POSTGRES_USER" -d sportdb -c \
+  "ALTER DATABASE sportdb SET app.encryption_key = '$ENCRYPTION_KEY';"
+
 echo "All databases created successfully."
